@@ -1,0 +1,8 @@
+torch>=1.9.0
+torchvision
+numpy
+mmengine
+mmcv>=2.0.0
+mmdet>=3.0.0
+mmdet3d>=1.1.0
+ninja
