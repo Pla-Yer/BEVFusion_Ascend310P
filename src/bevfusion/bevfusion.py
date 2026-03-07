@@ -14,6 +14,11 @@ from mmdet3d.registry import MODELS
 from mmdet3d.structures import Det3DDataSample
 from mmdet3d.utils import OptConfigType, OptMultiConfig, OptSampleList
 from .ops import Voxelization
+import sys
+import os.path as osp
+# PyTorch 2.6+ weights_only 补丁（你已有）
+sys.path.insert(0, osp.dirname(__file__))
+# import fix_pytorch_weights_only  # noqa
 
 
 @MODELS.register_module()
@@ -162,14 +167,31 @@ class BEVFusion(Base3DDetector):
                 img_metas,
             )
         return x
+    # source
+    # def extract_pts_feat(self, batch_inputs_dict) -> torch.Tensor:
+    #     points = batch_inputs_dict['points']
+    #     with torch.autocast('cuda', enabled=False):
+    #         points = [point.float() for point in points]
+    #         feats, coords, sizes = self.voxelize(points)
+    #         batch_size = coords[-1, 0] + 1
+    #     x = self.pts_middle_encoder(feats, coords, batch_size)
+    #     return x
 
+    # change by player to fit pillar_scatter
     def extract_pts_feat(self, batch_inputs_dict) -> torch.Tensor:
         points = batch_inputs_dict['points']
         with torch.autocast('cuda', enabled=False):
-            points = [point.float() for point in points]
-            feats, coords, sizes = self.voxelize(points)
-            batch_size = coords[-1, 0] + 1
-        x = self.pts_middle_encoder(feats, coords, batch_size)
+            points = [p.float() for p in points]
+            voxels, coords, num_points = self.voxelize(points)  # voxels: [V,M,Cin], coors: [V,4], num_points: [V]
+            batch_size = int(coords[-1, 0].item()) + 1
+
+        # 如果当前 coords 是 (b, y, x, z)，转成 (b, z, y, x)
+        coords = coords[:, [0, 3, 1, 2]].contiguous()
+        # 关键：先做 voxel encoder，把 [V,M,Cin] -> [V,Cout]
+        voxel_features = self.pts_voxel_encoder(voxels, num_points, coords)  # -> [V, Cout]
+
+        # 再 scatter 到 BEV: [B, Cout, H, W]
+        x = self.pts_middle_encoder(voxel_features, coords, batch_size)
         return x
 
     @torch.no_grad()

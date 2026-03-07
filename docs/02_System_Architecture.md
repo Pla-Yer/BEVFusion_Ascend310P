@@ -1,14 +1,15 @@
 # System Architecture
 
-## Overview
-
-本文档描述 BEVFusion 从 GPU 到 Ascend 310P 的系统架构迁移设计。
+> 最后更新: 2026-03-07
+> 
+> 本文档描述 BEVFusion 从 GPU 到 Ascend 310P 的系统架构迁移设计。
 
 ---
 
 ## Original GPU Pipeline
 
 原始 BEVFusion 在 GPU 上的数据流：
+
 <div align=center>
 <img src="https://user-images.githubusercontent.com/34888372/215313913-4b43f8a1-e2e2-49ba-b631-992155351922.png" width="800"/>
 </div>
@@ -71,20 +72,20 @@
 
 ### CPU 负责
 
-| 模块 | 原因 | 实现方式 |
-|------|------|----------|
+| 模块           | 原因           | 实现方式              |
+| ------------ | ------------ | ----------------- |
 | Voxelization | 稀疏操作，NPU 不支持 | NumPy/PyTorch CPU |
-| NMS | 后处理，计算量小 | PyTorch CPU |
+| NMS          | 后处理，计算量小     | PyTorch CPU       |
 
 ### NPU 负责
 
-| 模块 | 原因 | 实现方式 |
-|------|------|----------|
-| Image Backbone | 密集计算，NPU 高效 | OM 模型 |
-| Pillar Encoder | 替代 SparseConv3d | OM 模型 |
-| BEV Fusion | 密集计算 | OM 模型 |
-| Pts Backbone+Neck | 密集计算 | OM 模型 |
-| Detection Head | 密集计算 | OM 模型 |
+| 模块                | 原因              | 实现方式  |
+| ----------------- | --------------- | ----- |
+| Image Backbone    | 密集计算，NPU 高效     | OM 模型 |
+| Pillar Encoder    | 替代 SparseConv3d | OM 模型 |
+| BEV Fusion        | 密集计算            | OM 模型 |
+| Pts Backbone+Neck | 密集计算            | OM 模型 |
+| Detection Head    | 密集计算            | OM 模型 |
 
 ---
 
@@ -131,8 +132,6 @@ Step 8: CPU NMS
 ├── Input: Raw Detections
 └── Output: Final Detections [K, 9] (box3d, score, label)
 ```
-
-
 
 ## References
 
