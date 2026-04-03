@@ -140,9 +140,6 @@ class Voxelization(nn.Module):
             max_voxels = self.max_voxels[0]
         else:
             max_voxels = self.max_voxels[1]
-        print("Voxelizer grid size:", self.grid_size)
-        print("voxel_size:", self.voxel_size)
-        print("point_cloud_range:", self.point_cloud_range)
 
         return voxelization(
             input,

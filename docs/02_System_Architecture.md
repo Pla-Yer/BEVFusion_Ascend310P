@@ -1,6 +1,6 @@
 # System Architecture
 
-> 最后更新: 2026-03-07
+> 最后更新: 2026-03-20
 > 
 > 本文档描述 BEVFusion 从 GPU 到 Ascend 310P 的系统架构迁移设计。
 
@@ -76,6 +76,8 @@
 | ------------ | ------------ | ----------------- |
 | Voxelization | 稀疏操作，NPU 不支持 | NumPy/PyTorch CPU |
 | NMS          | 后处理，计算量小     | PyTorch CPU       |
+| Depth Generation | 深度估计计算 | CPU |
+| Geometry Calculation | 几何变换计算 | CPU |
 
 ### NPU 负责
 
@@ -86,6 +88,7 @@
 | BEV Fusion        | 密集计算            | OM 模型 |
 | Pts Backbone+Neck | 密集计算            | OM 模型 |
 | Detection Head    | 密集计算            | OM 模型 |
+| BEV Pool          | 特征池化            | 算道优化+并行化(已完成) |
 
 ---
 

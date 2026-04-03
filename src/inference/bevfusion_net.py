@@ -153,7 +153,7 @@ class Net:
             # 根据输出索引确定数据类型
             # 输出: dense_heatmap, top_cls, query_heatmap_score, heatmap_q, center, height, dim, rot, vel, top_idx, top, top_score, keep
             if i == 1  or i == 9 or i == 10 or i == 12:  # top_cls, heatmap_q, top_idx, top, keep 是 int32
-                results.append(np.frombuffer(data_bytes, dtype=np.int32).copy())
+                results.append(np.frombuffer(data_bytes, dtype=np.int64).copy())
             else:  # 其他都是 float32
                 results.append(np.frombuffer(data_bytes, dtype=np.float32).copy())
 

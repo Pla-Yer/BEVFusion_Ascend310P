@@ -79,7 +79,7 @@ class BEVFusionEvaluator:
             voxel_size=self.voxel_size,
             point_cloud_range=self.pc_range,
             max_num_points=32,
-            max_voxels=6000,
+            max_voxels=10000,
             deterministic=True
         )
 
@@ -681,12 +681,12 @@ if __name__ == "__main__":
     project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
     ctx        = init_acl(0)
-    model_path = os.path.join(project_root, "models/om/bevfusion_aligned.om")
+    model_path = os.path.join(project_root, "models/om/bevfusion_aligned_fp16.om")
     if not os.path.exists(model_path):
         print(f"Error: Model not found at {model_path}")
         sys.exit(1)
 
-    net      = Net(model_path)
+    net      = Net(model_path,gears=[6000, 8000, 10000])
     dataroot = os.path.join(project_root, "data/nuscenes-mini")
     if not os.path.exists(os.path.join(dataroot, "v1.0-mini")):
         print(f"Error: NuScenes dataset not found at {dataroot}")

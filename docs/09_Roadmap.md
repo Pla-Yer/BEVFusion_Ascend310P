@@ -2,7 +2,7 @@
 
 > 本文档记录项目路线图和里程碑。
 > 
-> 最后更新: 2026-03-07
+> 最后更新: 2026-04-02
 
 ## Version Milestones
 
@@ -71,16 +71,17 @@
 | W1   | Voxelization 实现                  | ✅ 完成   |
 | W2   | Voxelization 测试 + Pillar Encoder | ✅ 完成   |
 | W3   | Pillar Encoder 完成 + NMS          | ✅ 完成   |
-| W4   | CPU 模块集成测试                       | 🔄 进行中 |
+| W4   | 全流程性能优化（BEVPool+并行化+流水线）  | ✅ 完成 |
+| W5   | 模型量化实验（AMCT PTQ）  | ✅ 完成 |
 
 ### April 2026
 
-| Week | Tasks                  |
-| ---- | ---------------------- |
-| W1   | Image Backbone ONNX    |
-| W2   | Image Backbone OM      |
-| W3   | Detection Head ONNX/OM |
-| W4   | BEV Fusion 模块          |
+| Week | Tasks                  | Status |
+| ---- | ---------------------- | ------ |
+| W1   | 量化策略优化与重新设计    | 🔄 进行中 |
+| W2   | Image Backbone OM      | 待开始 |
+| W3   | Detection Head ONNX/OM | 待开始 |
+| W4   | BEV Fusion 模块          | 待开始 |
 
 ### May 2026
 
@@ -137,10 +138,10 @@ v0.1 ─────► v0.2 ─────► v0.3 ─────► v0.4 ─
 | --------- | ----- | ------- | ------- | ------- | ------- |
 | CPU 模块完成度 | 100%  | -       | -       | -       | -       |
 | NPU 模块完成度 | -     | 100%    | -       | -       | -       |
-| mAP       | 0.19  | -       | > 0.50  | > 0.50  | > 0.50  |
+| mAP       | 0.19  | -       | 0.2137  | > 0.50  | > 0.50  |
 | NDS       | -     | -       | > 0.55  | > 0.55  | > 0.55  |
-| Latency   | 425ms | < 300ms | < 250ms | < 200ms | < 200ms |
-| FPS       | 1.9   | > 3     | > 4     | > 5     | > 5     |
+| Latency   | 425ms | < 300ms | 166ms   | < 150ms | < 150ms |
+| FPS       | 1.9   | > 3     | 6.01    | > 6     | > 6     |
 
 ---
 
