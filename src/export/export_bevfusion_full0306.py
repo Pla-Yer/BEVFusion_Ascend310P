@@ -152,11 +152,13 @@ class BEVFusionDeployFinal(nn.Module):
 
         # ── top_cls / top_idx（全 float 路径，避免整数算子问题）───────────
         HW        = heatmap.shape[-1]                              # 32400
-        top_f     = top_proposals.float()
-        top_cls_f = torch.floor(top_f / float(HW))
-        top_idx_f = top_f - top_cls_f * float(HW)
-        top_proposals_class = top_cls_f.long()                     # [B, K]
-        top_proposals_index = top_idx_f.long()                     # [B, K]
+        top_proposals_class = top_proposals // HW
+        top_proposals_index = top_proposals % HW
+        # top_f     = top_proposals.float()
+        # top_cls_f = torch.floor(top_f / float(HW))
+        # top_idx_f = top_f - top_cls_f * float(HW)
+        # top_proposals_class = top_cls_f.long()                     # [B, K]
+        # top_proposals_index = top_idx_f.long()                     # [B, K]
 
         # ── Gather query feature（对齐原始）──────────────────────────────
         query_feat = fusion_feat_flatten.gather(
@@ -203,7 +205,7 @@ class BEVFusionDeployFinal(nn.Module):
 
         return (
             dense_heatmap,                                  # [B, 10, H, W]
-            top_proposals_class.to(torch.int32),            # [B, K]
+            top_proposals_class,            # [B, K]
             query_heatmap_score,                            # [B, 10, K]
             ret_dicts[-1]['heatmap'],                       # [B, 10, K]
             ret_dicts[-1]['center'],                        # [B, 2, K]
@@ -213,53 +215,8 @@ class BEVFusionDeployFinal(nn.Module):
             ret_dicts[-1].get(
                 'vel', torch.zeros(batch_size, 2, self.K,
                                    device=voxels.device)),  # [B, 2, K]
-            top_proposals_index.to(torch.int32),            # [B, K]
+            top_proposals_index,            # [B, K]
         )
-
-
-# ════════════════════════════════════════════════════════════════════════════
-#  与原始推理结果对比验证
-# ════════════════════════════════════════════════════════════════════════════
-
-def verify_vs_original(model, voxels, num_points, coords, K, device):
-    """验证导出模型与原始 forward_single 结果一致"""
-    head = model.bbox_head
-
-    # 原始推理路径（直接调用 forward_single）
-    enc = model.pts_middle_encoder
-    with torch.no_grad():
-        vf   = model.pts_voxel_encoder(voxels[:enc.ny*enc.nx], 
-                                        num_points[:enc.ny*enc.nx],
-                                        coords[:enc.ny*enc.nx])
-        # 用完整模型推理
-        bev  = model.pts_middle_encoder(vf, coords[:vf.shape[0]], 1)
-        neck = model.pts_neck(list(model.pts_backbone(bev)))[0]
-        orig_outs = head.forward_single(neck, None)
-
-    # 导出模型推理
-    deploy = BEVFusionDeployFinal(model, K=K).eval().to(device)
-    with torch.no_grad():
-        dep_outs = deploy(voxels, num_points, coords)
-
-    print("对比导出模型 vs 原始 forward_single:")
-
-    # dense_heatmap
-    orig_dm = orig_outs[0]['dense_heatmap'].cpu().numpy()
-    dep_dm  = dep_outs[0].cpu().numpy()
-    diff_dm = np.abs(orig_dm - dep_dm).max()
-    print(f"  dense_heatmap:  max|Δ|={diff_dm:.4e}  {'✅' if diff_dm < 0.1 else '❌'}")
-
-    # top_cls
-    orig_cls = head.query_labels.cpu().numpy()
-    dep_cls  = dep_outs[1].cpu().numpy()
-    match_cls = np.sum(orig_cls == dep_cls)
-    print(f"  top_cls:        匹配 {match_cls}/{K}  {'✅' if match_cls == K else '⚠️'}")
-
-    # query_heatmap_score
-    orig_qhs = orig_outs[0]['query_heatmap_score'].cpu().numpy()
-    dep_qhs  = dep_outs[2].cpu().numpy()
-    diff_qhs = np.abs(orig_qhs - dep_qhs).max()
-    print(f"  query_heatmap:  max|Δ|={diff_qhs:.4e}  {'✅' if diff_qhs < 0.1 else '❌'}")
 
 
 # ════════════════════════════════════════════════════════════════════════════
@@ -304,16 +261,16 @@ def export_onnx(deploy, inputs, path, dynamic=False):
             export_params=True,
             verbose=False,
         )
-    try:
-        import onnx
-        from collections import Counter
-        g   = onnx.load(path)
-        ops = Counter(nd.op_type for nd in g.graph.node)
-        cmp = ops.get("Greater",0) + ops.get("GreaterOrEqual",0) + ops.get("Less",0)
-        print(f"  {'动态' if dynamic else '静态'}: {osp.basename(path)}")
-        print(f"    比较算子: {cmp}  Clip: {ops.get('Clip',0)}")
-    except ImportError:
-        print(f"  ✅ {path}")
+    # try:
+    #     import onnx
+    #     from collections import Counter
+    #     g   = onnx.load(path)
+    #     ops = Counter(nd.op_type for nd in g.graph.node)
+    #     cmp = ops.get("Greater",0) + ops.get("GreaterOrEqual",0) + ops.get("Less",0)
+    #     print(f"  {'动态' if dynamic else '静态'}: {osp.basename(path)}")
+    #     print(f"    比较算子: {cmp}  Clip: {ops.get('Clip',0)}")
+    # except ImportError:
+    #     print(f"  ✅ {path}")
 
 
 def main():
@@ -322,8 +279,8 @@ def main():
     p.add_argument("--ckpt",        default="work_dirs/bevfusion/epoch_20.pth")
     p.add_argument("--outdir",      default="models/onnx_aligned")
     p.add_argument("--K",           type=int, default=200)
-    p.add_argument("--num-voxels",  type=int, default=5000)
-    p.add_argument("--max-voxels",  type=int, default=6000)
+    p.add_argument("--num-voxels",  type=int, default=6000)
+    p.add_argument("--max-voxels",  type=int, default=10000)
     p.add_argument("--dataset",     default="nuScenes",
                    choices=["nuScenes", "Waymo"])
     args = p.parse_args()
