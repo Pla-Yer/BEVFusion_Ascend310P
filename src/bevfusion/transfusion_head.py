@@ -227,13 +227,29 @@ class TransFusionHead(nn.Module):
         with torch.autocast('cuda', enabled=False):
             dense_heatmap = self.heatmap_head(fusion_feat.float())
         heatmap = dense_heatmap.detach().sigmoid()
+
+
         padding = self.nms_kernel_size // 2
-        local_max = torch.zeros_like(heatmap)
-        # equals to nms radius = voxel_size * out_size_factor * kenel_size
-        local_max_inner = F.max_pool2d(
-            heatmap, kernel_size=self.nms_kernel_size, stride=1, padding=0)
-        local_max[:, :, padding:(-padding),
-                  padding:(-padding)] = local_max_inner
+
+        # local_max = torch.zeros_like(heatmap)
+        # # equals to nms radius = voxel_size * out_size_factor * kenel_size
+        # local_max_inner = F.max_pool2d(
+        #     heatmap, kernel_size=self.nms_kernel_size, stride=1, padding=0)
+        # local_max[:, :, padding:(-padding),
+        #           padding:(-padding)] = local_max_inner
+        # change by player
+        # p = self.nms_kernel_size // 2
+        # local_max = F.max_pool2d(heatmap, kernel_size=self.nms_kernel_size, stride=1, padding=p)
+        #
+        # # 生成一个 mask：中心区域为1，边界p宽度为0
+        # mask = torch.zeros_like(heatmap)
+        # mask[:, :, p:heatmap.shape[2] - p, p:heatmap.shape[3] - p] = 1.0
+        # 
+        # # 只在中心区域做 peak 筛选，边界强制为0（等价于原来的 local_max=0）
+        # heatmap = heatmap * (heatmap == local_max) * mask
+
+        local_max = F.max_pool2d(heatmap, kernel_size=self.nms_kernel_size, stride=1, padding=padding)
+
         # for Pedestrian & Traffic_cone in nuScenes
         if self.test_cfg['dataset'] == 'nuScenes':
             local_max[:, 8, ] = F.max_pool2d(
@@ -250,8 +266,12 @@ class TransFusionHead(nn.Module):
         heatmap = heatmap.view(batch_size, heatmap.shape[1], -1)
 
         # top num_proposals among all classes
-        top_proposals = heatmap.view(batch_size, -1).argsort(
-            dim=-1, descending=True)[..., :self.num_proposals]
+        # top_proposals = heatmap.view(batch_size, -1).argsort(
+        #     dim=-1, descending=True)[..., :self.num_proposals]
+        # change to topk by player
+        scores_flat = heatmap.view(batch_size, -1)
+        _, top_proposals = torch.topk(scores_flat, k=self.num_proposals, dim=-1)
+
         top_proposals_class = top_proposals // heatmap.shape[-1]
         top_proposals_index = top_proposals % heatmap.shape[-1]
         query_feat = fusion_feat_flatten.gather(

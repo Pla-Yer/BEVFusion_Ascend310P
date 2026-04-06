@@ -1,0 +1,9 @@
+{
+    "Switch": {
+        "GraphFusion": {
+            "SwinAttentionScoreFusionPass": "off",
+            "AttentionQKVFusionPass":       "off",
+            "AttentionLnQKVFusionPass":     "off"
+        }
+    }
+}

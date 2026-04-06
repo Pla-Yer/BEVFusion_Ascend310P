@@ -145,6 +145,7 @@ class BaseViewTransform(nn.Module):
         # collapse Z
         final = torch.cat(x.unbind(dim=2), 1)
 
+
         return final
 
     def forward(
@@ -327,8 +328,75 @@ class BaseDepthTransform(BaseViewTransform):
         )
 
         x = self.get_cam_feats(img, depth)
-        x = self.bev_pool(geom, x)
+        # x = self.bev_pool(geom, x)
+        x = self.bev_pool_scatter(geom, x)
         return x
+
+    def bev_pool_scatter(self, geom_feats, x):
+        """
+        geom_feats: [B,N,D,H,W,3]  (float, lidar coords)
+        x:         [B,N,D,H,W,C]  (float)
+        return:    [B, C*nx2, nx0, nx1]
+        """
+        B, N, D, H, W, C = x.shape
+        Nprime = B * N * D * H * W
+
+        # ---- flatten feats ----
+        feats = x.reshape(Nprime, C)  # [Nprime, C]
+        coords = geom_feats.reshape(Nprime, 3)  # [Nprime, 3]
+
+        # ---- grid index: floor((coord - (bx - dx/2)) / dx) ----
+        # 这里严格对齐你原逻辑： (geom_feats - (bx - dx/2))/dx 然后 long()
+        # 注意：self.bx/self.dx 建议是 shape=[3] 的 tensor（原代码就是）
+        idx = ((coords - (self.bx - self.dx / 2.0)) / self.dx).to(torch.int64)  # [Nprime, 3]
+        x_id = idx[:, 0]
+        y_id = idx[:, 1]
+        z_id = idx[:, 2]
+
+        # ---- batch id（替代原来 python for + torch.full 拼接）----
+        # 每个 batch 的点数固定 = Nprime // B
+        pts_per_batch = Nprime // B
+        b_id = torch.arange(B, device=feats.device, dtype=torch.int64).repeat_interleave(pts_per_batch)  # [Nprime]
+
+        # ---- valid mask（替代 kept + 动态裁剪）----
+        # self.nx 是 int tensor: [nx0, nx1, nx2]
+        nx0 = self.nx[0].to(torch.int64)
+        nx1 = self.nx[1].to(torch.int64)
+        nx2 = self.nx[2].to(torch.int64)
+
+        valid = (
+                (x_id >= 0) & (x_id < nx0) &
+                (y_id >= 0) & (y_id < nx1) &
+                (z_id >= 0) & (z_id < nx2)
+        )
+
+        # mask 置零：等价于把 kept 外的点删掉再 sum
+        feats = feats * valid.to(feats.dtype).unsqueeze(1)
+
+        # clamp 防越界：无效点 feats=0，所以 clamp 到边界不会影响 sum
+        x_id = x_id.clamp(0, nx0 - 1)
+        y_id = y_id.clamp(0, nx1 - 1)
+        z_id = z_id.clamp(0, nx2 - 1)
+
+        # ---- linear index into (B, nx2, nx0, nx1) ----
+        # lin = b*(nx2*nx0*nx1) + z*(nx0*nx1) + x*(nx1) + y
+        stride_x = nx1
+        stride_z = nx0 * nx1
+        stride_b = nx2 * nx0 * nx1
+        lin = b_id * stride_b + z_id * stride_z + x_id * stride_x + y_id  # [Nprime]
+
+        # ---- scatter_reduce sum ----
+        out_cells = B * nx2 * nx0 * nx1
+        out = torch.zeros((out_cells, C), device=feats.device, dtype=feats.dtype)  # [cells, C]
+
+        # scatter_reduce 需要 index 与 src 同 shape
+        idx2 = lin.view(-1, 1).expand(-1, C)  # [Nprime, C]
+        out = out.scatter_reduce(0, idx2, feats, reduce="sum", include_self=True)  # [cells, C]
+
+        # ---- reshape back to [B, C*nx2, nx0, nx1] ----
+        out = out.view(B, nx2, nx0, nx1, C).permute(0, 4, 1, 2, 3).contiguous()  # [B,C,nx2,nx0,nx1]
+        final = out.reshape(B, C * nx2, nx0, nx1)  # [B,C*nx2,nx0,nx1]
+        return final
 
 
 @MODELS.register_module()
